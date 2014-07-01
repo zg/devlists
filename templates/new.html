@@ -1,0 +1,17 @@
+<div class="page-header">
+        <h1><%TITLE%></h1>
+      </div>
+      <p class="lead">
+        <form method="post" role="form">
+          <div class="form-group">
+            <input type="text" placeholder="Title" name="title" class="form-control" value="<%INPUTTITLE%>" required>
+          </div>
+          <div class="form-group">
+            <textarea class="form-control" name="contents" rows="3"><%TEXTAREACONTENTS%></textarea>
+          </div>
+          <div class="form-group">
+            <button type="submit" class="btn btn-success" name="type" value="public">Create Public List</button>
+            <button type="submit" class="btn btn-danger" name="type" value="private"><span class="glyphicon glyphicon-lock"></span> Create Private List</button>
+          </div>
+        </form>
+      </p>
