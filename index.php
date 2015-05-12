@@ -1,4 +1,5 @@
 <?php
+require_once('secret.php'); # define('SECRETKEY',CAPTCHA_KEY);
 date_default_timezone_set('America/New_York');
 
 function relativeTime($time){
@@ -15,6 +16,9 @@ function relativeTime($time){
     $now = time();
     $diff = ($now-$time);
     $secondsLeft = $diff;
+
+    if(60*60*24*7 < $secondsLeft)
+        return date('M j, Y');
 
     for($i=6;$i>-1;$i--)
     {
@@ -78,18 +82,47 @@ $db = new MongoClient;
 $view = new View;
 
 if(count($_POST)){
-    if(isset($_POST['title']) && strlen($_POST['title']) < 255 && isset($_POST['contents']) && isset($_POST['type'])){
+    $url = "https://www.google.com/recaptcha/api/siteverify";
+    $data = array (
+        'secret' => SECRETKEY,
+        'response' => $_POST['g-recaptcha-response'],
+        'remoteip' => $_SERVER['REMOTE_ADDR']
+    );
+    $options = array (
+        'http' => array(
+            'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
+            'method'  => 'POST',
+            'content' => http_build_query($data)
+        )
+    );
+    $context = stream_context_create($options);
+    $json = file_get_contents($url, false, $context);
+    $result = json_decode($json);
+    if($result->success && isset($_POST['title']) && strlen($_POST['title']) < 255 && isset($_POST['contents']) && strlen($_POST['contents']) < 1048576 && isset($_POST['type'])){
         $sector = ($_POST['type'] == 'private' ? 'private' : 'public');
+
         $data = array (
             "title" => htmlentities($_POST['title']),
             "contents" => htmlentities($_POST['contents']),
-            "created_at" => microtime(true),
-            "private" => ($_POST['type'] == 'private')
+            "created_at" => microtime(true)
         );
+
         if($sector == "private")
-            $data['hash'] = md5(base64_encode($data['title'].$data['contents'].$data['created_at']));
+            $data['url'] = md5(base64_encode($data['title'].$data['contents'].$data['created_at']));
+        else
+            $data['hash'] = md5(htmlentities($_POST['title']).htmlentities($_POST['contents']));
+
+        if($sector == "public") {
+            $cursor = $db->devlists->public->find(array('hash'=>$data['hash']));
+            if(0 < $cursor->count()) {
+                $doc = $cursor->getNext();
+                header('Location: /list/'.(string)$doc['_id']);
+                die();
+            }
+        }
+        
         $db->devlists->$sector->insert($data);
-        header('Location: /list/'.($data['private'] ? 'private/'.$data['hash'] : $data['_id']));
+        header('Location: /list/'.($data['private'] ? 'private/'.$data['url'] : $data['_id']));
     }
 }
 
@@ -111,7 +144,7 @@ switch($uri[0]){
             }
         } elseif(isset($uri[1]) && $uri[1] == "private" && isset($uri[2]) && strlen($uri[2]) == 32 && ctype_xdigit($uri[2])){
             try {
-                $list_data = $db->devlists->private->findOne(array('hash'=>$uri[2]));
+                $list_data = $db->devlists->private->findOne(array('url'=>$uri[2]));
                 if(is_null($list_data)){
                     echo $view->render_page('Private list not found','list_not_found');
                 } else {
@@ -140,7 +173,7 @@ switch($uri[0]){
         break;
     case 'new':
     case 'create':
-        echo $view->render_new_list('Create a new List','My List',"List 1\r\nList 2\r\nList 3");
+        echo $view->render_new_list('Create a new List','My List',"Item 1\r\nItem 2\r\nItem 3");
         break;
     case 'lists':
     case 'all':
@@ -155,6 +188,7 @@ switch($uri[0]){
         }
         echo $view->render_all_lists($recent_lists);
         break;
+    default:
     case '':
         echo $view->render_page('Home','home');
         break;
